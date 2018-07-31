@@ -9,7 +9,7 @@ A little history of this project -- I had been doing this for years manually, an
 Note that currently it only supports JPEG files.
 
 # Usage
-
+```
 bash$ ./filarch.py --help
 
 Usage: filarch.py [options]
@@ -20,19 +20,22 @@ Options:
   -m, --merge           Merge the same files.
   -x EXTENSION, --extension=EXTENSION
                         File extension to archive.
+```
 
 # Examples
 
 - Copy JPEG files from external HD to local HD:
-
+```
 python3 filarch.py -r -m -x .jpg D:\DCIM C:\Pictures
 ...
 D:\\DCIM\\xyz.jpg  >  C:\\Pictures\\2018\\20180608\\218608_D2436.jpg
 ...
+```
 
 - Restructure existing JPEG files on the local HD:
-
+```
 python3 filarch.py -r C:\Pictures C:\Archive\Pictures
+```
 
 # TODO list
 
