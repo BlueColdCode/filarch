@@ -8,22 +8,28 @@ from PIL import Image
 import shutil
 import string
 
-options = {'recurse': False, 'merge': False, 'extension': '.jpg'}
+options = {'recurse': False, 'merge': False, 'extension': '.jpg', 'debug': False}
 filenum_on_date = {}
+
 
 #input: date of the file creation.
 #input: seqno: the sequence number of the file created at the same moment.
 # return string filename based on date.
 def filename_on_date(dt, seqno = 0):
     pref = '1' if dt.strftime('%Y') == '19' else '2'
-    newfilename = pref + dt.strftime('%y') + ('%X' % dt.month) + dt.strftime('%d_') +\
-                  ('%c' % list(string.ascii_uppercase)[dt.hour]) + ('%.2d' % dt.minute) + ('%.2d' % (dt.second + seqno)) +\
+    newfilename = pref + dt.strftime('%y') + ('%X' % dt.month) + dt.strftime('%d') +\
+                  ('%c' % list(string.ascii_lowercase)[dt.hour]) + ('%.2d' % dt.minute) + ('%.2d' % (dt.second + seqno)) +\
                   options.extension
     return newfilename
 
-def locate_dir(createdate: datetime):
+# create the complete path of a file with the createdate, prefix.
+def locate_dir(tofolder: Path, createdate: datetime) -> Path:
     cdate = createdate.strftime('%Y%m%d')
     tdate = None
+
+    if options.debug:
+        print("finding " + cdate + ' in', filenum_on_date.keys())
+
     for dt in sorted(filenum_on_date.keys()):
         if tdate == None: tdate = dt
         if dt <= cdate:
@@ -34,7 +40,7 @@ def locate_dir(createdate: datetime):
     if tdate == None:
         raise Exception("Destination directory not found for " + cdate)
 
-    return tdate
+    return tofolder / createdate.strftime('%Y') / tdate
 
 def move_files(fromfolder, tofolder):
     print(fromfolder, ' --> ', tofolder)
@@ -51,13 +57,10 @@ def move_files(fromfolder, tofolder):
             if ftags is None: continue
             createtimestamp = ftags[36867]
             createdate = datetime.datetime.strptime(createtimestamp, '%Y:%m:%d %H:%M:%S')
-            weekday = createdate.date().isoweekday() - 1
-            folderdate = createdate.date() - datetime.timedelta(days=weekday)
-            destfolder = Path(tofolder) / folderdate.strftime('%Y') / locate_dir(createdate)
+            destfolder = locate_dir(tofolder, createdate)
 
             # make up the new file name.
-            newfilename = filename_on_date(createdate)
-            newfile = destfolder / newfilename
+            newfile = destfolder / filename_on_date(createdate)
 
             # create the directory if it does not already exists.
             if not os.path.exists(destfolder):
@@ -79,15 +82,17 @@ def move_files(fromfolder, tofolder):
             except:
                 # try hard copy. throw exception if needed.
                 shutil.copy2(oldfile, newfile)
+
             print(oldfile, ' > ', newfile)
+
         except Exception as e:
             print(e)
             continue
 
-#input: dirname with all the files.
+#input: fromdir with all the files.
 #output: directory names and corresponding file number in each.
-def tally_dirs(dirname):
-    for folder, subfolders, files in os.walk(dirname):
+def tally_dirs(fromdir, tofolder):
+    for folder, subfolders, files in os.walk(fromdir):
         for filename in os.listdir(folder):
             if not PurePath(filename).suffix.lower() == options.extension: continue
             try:
@@ -98,19 +103,26 @@ def tally_dirs(dirname):
                 # some image files do not have EXIF tags.
                 if ftags is None: continue
                 createtimestamp = ftags[36867]
-                createdate = datetime.datetime.strptime(createtimestamp, '%Y:%m:%d %H:%M:%S').date().strftime("%Y%m%d")
+                createdate = datetime.datetime.strptime(createtimestamp, '%Y:%m:%d %H:%M:%S')
+                destname = createdate.date().strftime('%Y%m%d')
 
-                #print(oldfile, "created on " + createdate)
+                if options.debug:
+                    print(oldfile, "created on", createdate)
 
-                if filenum_on_date.get(createdate) == None:
-                    filenum_on_date[createdate] = 1
+                destfolder = tofolder / createdate.strftime('$Y') / destname
+                if os.path.exists(destfolder):
+                    filenum_on_date[destname] = len(os.listdir(destfolder)) + 1
+                elif filenum_on_date.get(destname) == None:
+                    filenum_on_date[destname] = 1
                 else:
-                    filenum_on_date[createdate] += 1
+                    filenum_on_date[destname] += 1
             except Exception as e:
                 print(e)
                 pass
+
     dates = sorted(filenum_on_date.keys())
-    #for dt in dates: print(dt, filenum_on_date[dt])
+    if options.debug:
+        for dt in dates: print(dt, filenum_on_date[dt])
 
     collector_dt = None
     for dt in dates:
@@ -119,36 +131,37 @@ def tally_dirs(dirname):
             collector_dt = dt
             continue
 
+        # remove folder with insufficient files.
         if filenum_on_date[collector_dt] + filenum_on_date[dt] < 100:
             filenum_on_date[collector_dt] += filenum_on_date[dt]
             del filenum_on_date[dt]
 
-    #print('')
-    dates = sorted(filenum_on_date.keys())
-    #for dt in dates: print(dt, filenum_on_date[dt])
+    if options.debug:
+        print('')
+        for dt in sorted(filenum_on_date.keys()): print(dt, filenum_on_date[dt])
 
 #input: filenum_on_data already contains regulated directory names.
-#input: destfolder to hold the directory structure.
-#output: directory structure at the destfolder.
-def prep_dirs(destfolder: Path):
+#input: tofolder to hold the directory structure.
+#output: directory structure at the tofolder.
+def prep_dirs(tofolder: Path):
     for dt in sorted(filenum_on_date.keys()):
-        newfolder = destfolder / dt[0:4] / dt
+        newfolder = tofolder / dt[0:4] / dt
         if not newfolder.exists():
             os.makedirs(newfolder)
         elif newfolder.is_file():
             raise Exception("Directory conflicts with existing file name.")
 
-def walk_dirs(dirname, destfolder):
-    for folder, subfolders, files in os.walk(dirname):
+def walk_dirs(fromdir, tofolder):
+    for folder, subfolders, files in os.walk(fromdir):
         #Do not walk under the destination folder.
         srcfolder = Path(folder)
-        #print(folder, destfolder)
-        commonfolder = os.path.commonpath([srcfolder, destfolder])
-        #print(commonfolder, destfolder)
-        if commonfolder and os.path.samefile(commonfolder, destfolder):
+        #print(folder, tofolder)
+        commonfolder = os.path.commonpath([srcfolder, tofolder])
+        #print(commonfolder, tofolder)
+        if commonfolder and os.path.samefile(commonfolder, tofolder):
             print("skipping ", srcfolder)
             continue
-        move_files(srcfolder, destfolder)
+        move_files(srcfolder, tofolder)
 
 if __name__ == "__main__":
     from optparse import OptionParser
@@ -157,6 +170,8 @@ if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option('-r', '--recurse', default=False, action="store_true",
                 dest='recurse', help="Walk down the directory recursively.")
+    parser.add_option('-d', '--debug', default=False, action="store_true",
+                dest='debug', help="Turn on debug mode.")
     parser.add_option('-m', '--merge', default=False, action="store_true",
                 dest='merge', help="Merge the same files.")
     parser.add_option('-x', '--extension', default='.jpg',
@@ -166,28 +181,29 @@ if __name__ == "__main__":
     print(options)
 
     if (len(args) > 1):
-        dirname = Path(args[0])
-        destname = Path(args[1])
+        fromdir = Path(args[0])
+        todir = Path(args[1])
     else:
-        dirname = Path(".")
-        destname = Path("/tmp/")
+        fromdir = Path(".")
+        todir = Path("/tmp/")
 
-    #print(options, dirname, destname)
+    if options.debug:
+        print("args parse result: ", options, fromdir, todir)
 
     try:
-        if not dirname.exists():
+        if not fromdir.exists():
             raise
-        if not destname.exists():
-            os.makedirs(destname)
+        if not todir.exists():
+            os.makedirs(todir)
     except Exception as e:
         print(e)
         parser.print_help()
         sys.exit(1)
 
     # arrange file into directories.
-    tally_dirs(dirname)
-    prep_dirs(destname)
+    tally_dirs(fromdir, todir)
+    prep_dirs(todir)
 
-    move_files(dirname, destname)
+    move_files(fromdir, todir)
     if options.recurse:
-        walk_dirs(dirname, destname)
+        walk_dirs(fromdir, todir)
