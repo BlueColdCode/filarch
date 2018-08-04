@@ -17,7 +17,7 @@ filenum_on_date = {}
 # return string filename based on date.
 def filename_on_date(dt, seqno = 0):
     pref = '1' if dt.strftime('%Y') == '19' else '2'
-    newfilename = pref + dt.strftime('%y') + ('%X' % dt.month) + dt.strftime('%d') +\
+    newfilename = pref + dt.strftime('%y') + ('%X' % dt.month) + dt.strftime('%d-') +\
                   ('%c' % list(string.ascii_lowercase)[dt.hour]) + ('%.2d' % dt.minute) + ('%.2d' % (dt.second + seqno)) +\
                   options.extension
     return newfilename
