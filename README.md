@@ -42,3 +42,9 @@ python3 filarch.py -r C:\Pictures C:\Archive\Pictures
 - Support MP4.
 - Support MOV.
 - Support PNG and other image types.
+
+# EXIFTOOL
+The following tool command would produce similar results, i.e. moving all image/video files under <DIRs> to the current directory.
+```
+exiftool -r -v -P -d "%Y/%Y%m%W/%Y%m%d%%-.4nc.%%le" "-filename<filemodifydate" "-filename<datetimeoriginal" "-filename<createdate" <DIRs>
+```
